@@ -35,6 +35,7 @@ class ImageDecoderTest {
 
     @Test
     void testImageMetadata() {
+        long now = System.currentTimeMillis();
         ImageDecoder.ImageMetadata metadata = new ImageDecoder.ImageMetadata(
                 "Canon EOS 5D",
                 "EF 24-70mm f/2.8L",
@@ -43,7 +44,10 @@ class ImageDecoderTest {
                 "1/250",
                 "ISO 400",
                 1024L * 1024 * 25,
-                System.currentTimeMillis()
+                now,
+                now,
+                31.2304,
+                121.4737
         );
 
         assertEquals("Canon EOS 5D", metadata.camera());
@@ -53,6 +57,9 @@ class ImageDecoderTest {
         assertEquals("1/250", metadata.shutterSpeed());
         assertEquals("ISO 400", metadata.iso());
         assertEquals(1024L * 1024 * 25, metadata.fileSize());
+        assertEquals(now, metadata.dateTaken());
+        assertEquals(31.2304, metadata.latitude());
+        assertEquals(121.4737, metadata.longitude());
     }
 
     @Test

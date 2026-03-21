@@ -2,6 +2,7 @@ package com.pixelj.ui;
 
 import com.pixelj.internal.cache.ImageCacheCoordinator;
 import com.pixelj.internal.loader.PriorityImageLoader;
+import com.pixelj.util.GroupManager;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
@@ -30,15 +31,19 @@ public class VirtualizedWaterfallPane extends Region {
     private static final double COLUMN_WIDTH = 200;
     private static final double COLUMN_SPACING = 8;
     private static final double ROW_SPACING = 8;
+    private static final double HEADER_HEIGHT = 40;
     private static final int BUFFER_ROWS = 3;
 
     private final ScrollPane scrollPane;
     private final Pane contentPane;
     private final List<Path> items;
     private final Map<Path, ImageCell> visibleCells;
+    private final Map<String, GroupHeaderCell> visibleHeaders;
     private final ImageCacheCoordinator cacheCoordinator;
     private final PriorityImageLoader imageLoader;
+    private final GroupManager groupManager;
 
+    private List<DisplayItem> displayItems;
     private int columnCount;
     private double contentHeight;
     private double columnWidth;
@@ -52,7 +57,10 @@ public class VirtualizedWaterfallPane extends Region {
         this.cacheCoordinator = cacheCoordinator;
         this.imageLoader = imageLoader;
         this.items = new ArrayList<>();
+        this.displayItems = new ArrayList<>();
         this.visibleCells = new ConcurrentHashMap<>();
+        this.visibleHeaders = new ConcurrentHashMap<>();
+        this.groupManager = new GroupManager();
         this.columnCount = 4;
 
         this.contentPane = new Pane();
@@ -103,15 +111,77 @@ public class VirtualizedWaterfallPane extends Region {
     public void setItems(List<Path> newItems) {
         items.clear();
         items.addAll(newItems);
+        clearAllCells();
+        buildDisplayItems();
+        calculateLayout(scrollPane.getViewportBounds().getWidth());
+        repositionCells();
+        updateVisibleCells();
+        logger.info("Set {} items in waterfall pane", items.size());
+    }
+
+    /**
+     * 构建显示项列表（包含分组标题）。
+     */
+    private void buildDisplayItems() {
+        displayItems.clear();
+
+        if (groupManager.getGroupMode() == GroupManager.GroupMode.NONE) {
+            for (Path path : items) {
+                displayItems.add(new DisplayItem.ImageItem(path));
+            }
+        } else {
+            Map<String, List<Path>> groups = new LinkedHashMap<>();
+
+            for (Path path : items) {
+                String key = getGroupKey(path);
+                groups.computeIfAbsent(key, k -> new ArrayList<>()).add(path);
+            }
+
+            for (Map.Entry<String, List<Path>> entry : groups.entrySet()) {
+                displayItems.add(new DisplayItem.HeaderItem(
+                        entry.getKey(),
+                        entry.getKey(),
+                        entry.getValue().size(),
+                        entry.getValue()
+                ));
+                for (Path path : entry.getValue()) {
+                    displayItems.add(new DisplayItem.ImageItem(path));
+                }
+            }
+        }
+    }
+
+    private String getGroupKey(Path path) {
+        return "分组";
+    }
+
+    /**
+     * 设置分组模式。
+     *
+     * @param mode 分组模式
+     */
+    public void setGroupMode(GroupManager.GroupMode mode) {
+        groupManager.setGroupMode(mode);
+        buildDisplayItems();
+        clearAllCells();
+        calculateLayout(scrollPane.getViewportBounds().getWidth());
+        repositionCells();
+        updateVisibleCells();
+    }
+
+    /**
+     * 清除所有单元格。
+     */
+    private void clearAllCells() {
         for (ImageCell cell : visibleCells.values()) {
             cell.setBufferedImage(null);
             contentPane.getChildren().remove(cell);
         }
         visibleCells.clear();
-        calculateLayout(scrollPane.getViewportBounds().getWidth());
-        repositionCells();
-        updateVisibleCells();
-        logger.info("Set {} items in waterfall pane", items.size());
+        for (GroupHeaderCell header : visibleHeaders.values()) {
+            contentPane.getChildren().remove(header);
+        }
+        visibleHeaders.clear();
     }
 
     /**
@@ -121,6 +191,7 @@ public class VirtualizedWaterfallPane extends Region {
      */
     public void addItem(Path item) {
         items.add(item);
+        buildDisplayItems();
         calculateLayout(scrollPane.getViewportBounds().getWidth());
         repositionCells();
         updateVisibleCells();
@@ -138,6 +209,7 @@ public class VirtualizedWaterfallPane extends Region {
             cell.setBufferedImage(null);
             contentPane.getChildren().remove(cell);
         }
+        buildDisplayItems();
         calculateLayout(scrollPane.getViewportBounds().getWidth());
         repositionCells();
         updateVisibleCells();
@@ -154,8 +226,24 @@ public class VirtualizedWaterfallPane extends Region {
         columnCount = Math.max(1, (int) ((viewportWidth + COLUMN_SPACING) / (COLUMN_WIDTH + COLUMN_SPACING)));
         columnWidth = (viewportWidth - (columnCount - 1) * COLUMN_SPACING) / columnCount;
 
-        int rows = (int) Math.ceil((double) items.size() / columnCount);
-        contentHeight = rows * (columnWidth + ROW_SPACING) + 50;
+        int imageCount = 0;
+        for (DisplayItem item : displayItems) {
+            if (item instanceof DisplayItem.ImageItem) {
+                imageCount++;
+            }
+        }
+
+        int headerCount = 0;
+        for (DisplayItem item : displayItems) {
+            if (item instanceof DisplayItem.HeaderItem) {
+                headerCount++;
+            }
+        }
+
+        int imageRows = (int) Math.ceil((double) imageCount / columnCount);
+        int headerRows = headerCount;
+
+        contentHeight = headerRows * HEADER_HEIGHT + imageRows * (columnWidth + ROW_SPACING) + 50;
 
         contentPane.setPrefHeight(contentHeight);
         contentPane.setPrefWidth(viewportWidth);
@@ -168,17 +256,73 @@ public class VirtualizedWaterfallPane extends Region {
         for (Map.Entry<Path, ImageCell> entry : visibleCells.entrySet()) {
             Path path = entry.getKey();
             ImageCell cell = entry.getValue();
-            int index = items.indexOf(path);
+            int index = getDisplayIndexForPath(path);
             if (index >= 0) {
-                int col = index % columnCount;
-                int row = index / columnCount;
-                double x = col * (columnWidth + COLUMN_SPACING);
-                double y = row * (columnWidth + ROW_SPACING);
-                cell.setLayoutX(x);
-                cell.setLayoutY(y);
+                Position pos = calculatePosition(index);
+                cell.setLayoutX(pos.x);
+                cell.setLayoutY(pos.y);
                 cell.setPrefSize(columnWidth, columnWidth);
             }
         }
+
+        for (Map.Entry<String, GroupHeaderCell> entry : visibleHeaders.entrySet()) {
+            GroupHeaderCell header = entry.getValue();
+            int index = getDisplayIndexForHeader(entry.getKey());
+            if (index >= 0) {
+                Position pos = calculatePosition(index);
+                header.setLayoutX(0);
+                header.setLayoutY(pos.y);
+                header.setPrefSize(columnWidth * columnCount + (columnCount - 1) * COLUMN_SPACING, HEADER_HEIGHT);
+            }
+        }
+    }
+
+    private int getDisplayIndexForPath(Path path) {
+        for (int i = 0; i < displayItems.size(); i++) {
+            DisplayItem item = displayItems.get(i);
+            if (item instanceof DisplayItem.ImageItem img && img.path().equals(path)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int getDisplayIndexForHeader(String headerId) {
+        for (int i = 0; i < displayItems.size(); i++) {
+            DisplayItem item = displayItems.get(i);
+            if (item instanceof DisplayItem.HeaderItem hdr && hdr.id().equals(headerId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private Position calculatePosition(int displayIndex) {
+        int imageIndex = 0;
+        int headerIndex = 0;
+        int col = 0;
+        int row = 0;
+
+        for (int i = 0; i <= displayIndex; i++) {
+            DisplayItem item = displayItems.get(i);
+            if (item instanceof DisplayItem.HeaderItem) {
+                headerIndex++;
+                row++;
+            } else {
+                imageIndex++;
+                int currentCol = (imageIndex - 1) % columnCount;
+                int currentRow = headerIndex + (imageIndex - 1) / columnCount;
+                col = currentCol;
+                row = currentRow;
+            }
+        }
+
+        double x = col * (columnWidth + COLUMN_SPACING);
+        double y = row * (columnWidth + ROW_SPACING);
+        return new Position(x, y);
+    }
+
+    private record Position(double x, double y) {
     }
 
     /**
@@ -193,21 +337,36 @@ public class VirtualizedWaterfallPane extends Region {
 
         Set<Path> toLoad = new HashSet<>();
         Set<Path> toRecycle = new HashSet<>(visibleCells.keySet());
+        Set<String> toLoadHeaders = new HashSet<>();
+        Set<String> toRecycleHeaders = new HashSet<>(visibleHeaders.keySet());
 
-        for (int i = 0; i < items.size(); i++) {
-            Path item = items.get(i);
-            int col = i % columnCount;
-            int row = i / columnCount;
+        for (int i = 0; i < displayItems.size(); i++) {
+            DisplayItem item = displayItems.get(i);
+            Position pos = calculatePosition(i);
 
-            double itemX = col * (columnWidth + COLUMN_SPACING);
-            double itemY = row * (columnWidth + ROW_SPACING);
-            double itemBottom = itemY + columnWidth;
-
-            if (itemBottom >= viewTop && itemY <= viewBottom) {
-                toRecycle.remove(item);
-                if (!visibleCells.containsKey(item)) {
-                    toLoad.add(item);
+            if (item instanceof DisplayItem.HeaderItem hdr) {
+                double itemBottom = pos.y + HEADER_HEIGHT;
+                if (itemBottom >= viewTop && pos.y <= viewBottom) {
+                    toRecycleHeaders.remove(hdr.id());
+                    if (!visibleHeaders.containsKey(hdr.id())) {
+                        toLoadHeaders.add(hdr.id());
+                    }
                 }
+            } else if (item instanceof DisplayItem.ImageItem img) {
+                double itemBottom = pos.y + columnWidth;
+                if (itemBottom >= viewTop && pos.y <= viewBottom) {
+                    toRecycle.remove(img.path());
+                    if (!visibleCells.containsKey(img.path())) {
+                        toLoad.add(img.path());
+                    }
+                }
+            }
+        }
+
+        for (String headerId : toRecycleHeaders) {
+            GroupHeaderCell header = visibleHeaders.remove(headerId);
+            if (header != null) {
+                contentPane.getChildren().remove(header);
             }
         }
 
@@ -216,6 +375,17 @@ public class VirtualizedWaterfallPane extends Region {
             if (cell != null) {
                 cell.setBufferedImage(null);
                 contentPane.getChildren().remove(cell);
+            }
+        }
+
+        for (String headerId : toLoadHeaders) {
+            GroupHeaderCell header = getOrCreateHeader(headerId);
+            int index = getDisplayIndexForHeader(headerId);
+            if (index >= 0) {
+                Position pos = calculatePosition(index);
+                header.setLayoutX(0);
+                header.setLayoutY(pos.y);
+                header.setPrefSize(columnWidth * columnCount + (columnCount - 1) * COLUMN_SPACING, HEADER_HEIGHT);
             }
         }
 
@@ -258,19 +428,40 @@ public class VirtualizedWaterfallPane extends Region {
                 viewer.show();
             });
 
-            int index = items.indexOf(p);
-            int col = index % columnCount;
-            int row = index / columnCount;
-
-            double x = col * (columnWidth + COLUMN_SPACING);
-            double y = row * (columnWidth + ROW_SPACING);
-
-            cell.setLayoutX(x);
-            cell.setLayoutY(y);
-            cell.setPrefSize(columnWidth, columnWidth);
+            int index = getDisplayIndexForPath(p);
+            if (index >= 0) {
+                Position pos = calculatePosition(index);
+                cell.setLayoutX(pos.x);
+                cell.setLayoutY(pos.y);
+                cell.setPrefSize(columnWidth, columnWidth);
+            }
 
             contentPane.getChildren().add(cell);
             return cell;
+        });
+    }
+
+    /**
+     * 获取或创建分组标题单元格。
+     *
+     * @param headerId 标题ID
+     * @return 分组标题单元格
+     */
+    private GroupHeaderCell getOrCreateHeader(String headerId) {
+        return visibleHeaders.computeIfAbsent(headerId, id -> {
+            GroupHeaderCell header = new GroupHeaderCell();
+
+            for (DisplayItem item : displayItems) {
+                if (item instanceof DisplayItem.HeaderItem hdr && hdr.id().equals(id)) {
+                    header.setTitle(hdr.title());
+                    header.setCount(hdr.count());
+                    header.setGroupId(id);
+                    break;
+                }
+            }
+
+            contentPane.getChildren().add(header);
+            return header;
         });
     }
 

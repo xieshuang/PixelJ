@@ -1,15 +1,28 @@
 package com.pixelj.internal.decoder;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.imaging.jpeg.JpegMetadataReader;
+import com.drew.metadata.Directory;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.Tag;
+import com.drew.metadata.exif.ExifIFD0Directory;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
+import com.drew.metadata.exif.GpsDirectory;
 import com.pixelj.spi.ImageDecoder;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.TimeZone;
 
 /**
  * JPEG图片解码器
@@ -153,21 +166,75 @@ public class JpegImageDecoder implements ImageDecoder {
     }
 
     /**
-     * 读取基础元数据
+     * 读取图片元数据
      * 
-     * <p>默认实现仅返回文件大小和修改时间，
-     * 不包含EXIF相机信息（需要扩展）。
+     * <p>使用 metadata-extractor 库读取 EXIF 信息，
+     * 包括相机型号、拍摄日期和GPS位置。
      */
     @Override
     public Optional<ImageMetadata> readMetadata(Path path) throws Exception {
-        java.io.File file = path.toFile();
+        File file = path.toFile();
         if (!file.exists()) {
             return Optional.empty();
         }
+
+        String camera = null;
+        String lens = null;
+        String focalLength = null;
+        String aperture = null;
+        String shutterSpeed = null;
+        String iso = null;
+        long dateTaken = 0;
+        double latitude = 0;
+        double longitude = 0;
+
+        try {
+            Metadata metadata = JpegMetadataReader.readMetadata(file);
+
+            ExifIFD0Directory exifIFD0 = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
+            if (exifIFD0 != null) {
+                camera = exifIFD0.getDescription(ExifIFD0Directory.TAG_MODEL);
+            }
+
+            ExifSubIFDDirectory exifSubIFD = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+            if (exifSubIFD != null) {
+                lens = exifSubIFD.getDescription(ExifSubIFDDirectory.TAG_LENS_MODEL);
+                focalLength = exifSubIFD.getDescription(ExifSubIFDDirectory.TAG_FOCAL_LENGTH);
+                aperture = exifSubIFD.getDescription(ExifSubIFDDirectory.TAG_APERTURE);
+                shutterSpeed = exifSubIFD.getDescription(ExifSubIFDDirectory.TAG_EXPOSURE_TIME);
+                iso = exifSubIFD.getDescription(ExifSubIFDDirectory.TAG_ISO_EQUIVALENT);
+
+                Date date = exifSubIFD.getDate(ExifSubIFDDirectory.TAG_DATETIME_ORIGINAL, TimeZone.getDefault());
+                if (date != null) {
+                    dateTaken = date.getTime();
+                } else {
+                    date = exifSubIFD.getDate(ExifSubIFDDirectory.TAG_DATETIME, TimeZone.getDefault());
+                    if (date != null) {
+                        dateTaken = date.getTime();
+                    }
+                }
+            }
+
+            GpsDirectory gpsDirectory = metadata.getFirstDirectoryOfType(GpsDirectory.class);
+            if (gpsDirectory != null) {
+                com.drew.lang.GeoLocation geoLocation = gpsDirectory.getGeoLocation();
+                if (geoLocation != null) {
+                    latitude = geoLocation.getLatitude();
+                    longitude = geoLocation.getLongitude();
+                }
+            }
+
+        } catch (Exception e) {
+            // 元数据读取失败，使用默认值
+        }
+
         return Optional.of(new ImageMetadata(
-                null, null, null, null, null, null,
+                camera, lens, focalLength, aperture, shutterSpeed, iso,
                 file.length(),
-                file.lastModified()
+                file.lastModified(),
+                dateTaken,
+                latitude,
+                longitude
         ));
     }
 

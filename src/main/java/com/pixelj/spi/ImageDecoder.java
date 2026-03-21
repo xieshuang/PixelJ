@@ -73,6 +73,9 @@ public interface ImageDecoder {
      * @param iso          ISO感光度
      * @param fileSize     文件大小（字节）
      * @param lastModified 最后修改时间（毫秒）
+     * @param dateTaken    拍摄日期（毫秒时间戳）
+     * @param latitude     GPS纬度
+     * @param longitude    GPS经度
      */
     record ImageMetadata(
             String camera,
@@ -82,7 +85,10 @@ public interface ImageDecoder {
             String shutterSpeed,
             String iso,
             long fileSize,
-            long lastModified
+            long lastModified,
+            long dateTaken,
+            double latitude,
+            double longitude
     ) {
     }
 

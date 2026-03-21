@@ -5,6 +5,7 @@ import com.pixelj.internal.db.MetadataIndex;
 import com.pixelj.internal.fs.FileScanner;
 import com.pixelj.internal.fs.FileWatcher;
 import com.pixelj.internal.loader.PriorityImageLoader;
+import com.pixelj.util.GroupManager;
 import com.pixelj.util.HistoryManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -105,6 +106,26 @@ public class MainView {
         Button refreshBtn = new Button("刷新");
         refreshBtn.setOnAction(e -> refreshCurrentFolder());
 
+        ToggleGroup viewToggleGroup = new ToggleGroup();
+        RadioButton gridViewBtn = new RadioButton("瀑布流");
+        gridViewBtn.setToggleGroup(viewToggleGroup);
+        gridViewBtn.setSelected(true);
+        gridViewBtn.setOnAction(e -> {
+            if (waterfallPane != null) {
+                waterfallPane.setGroupMode(GroupManager.GroupMode.NONE);
+            }
+        });
+
+        RadioButton dateGroupBtn = new RadioButton("按日期");
+        dateGroupBtn.setToggleGroup(viewToggleGroup);
+        dateGroupBtn.setOnAction(e -> {
+            if (waterfallPane != null) {
+                waterfallPane.setGroupMode(GroupManager.GroupMode.BY_DATE);
+            }
+        });
+
+        HBox viewModeBox = new HBox(10, gridViewBtn, dateGroupBtn);
+
         Separator sep = new Separator();
         sep.setPrefWidth(20);
 
@@ -116,7 +137,7 @@ public class MainView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        ToolBar toolBar = new ToolBar(openFolderBtn, historyMenuBtn, refreshBtn, sep, titleBox, spacer);
+        ToolBar toolBar = new ToolBar(openFolderBtn, historyMenuBtn, refreshBtn, sep, viewModeBox, spacer, titleBox);
         toolBar.setPadding(new Insets(8, 8, 8, 8));
 
         return toolBar;

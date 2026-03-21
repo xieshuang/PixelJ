@@ -120,7 +120,8 @@ public class PngImageDecoder implements ImageDecoder {
         return Optional.of(new ImageMetadata(
                 null, null, null, null, null, null,
                 file.length(),
-                file.lastModified()
+                file.lastModified(),
+                0, 0, 0
         ));
     }
 
