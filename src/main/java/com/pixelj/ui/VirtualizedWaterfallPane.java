@@ -152,7 +152,19 @@ public class VirtualizedWaterfallPane extends Region {
     }
 
     private String getGroupKey(Path path) {
-        return "分组";
+        if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_DATE) {
+            try {
+                java.io.File file = path.toFile();
+                long lastModified = file.lastModified();
+                java.time.Instant instant = java.time.Instant.ofEpochMilli(lastModified);
+                java.time.ZoneId zoneId = java.time.ZoneId.systemDefault();
+                java.time.LocalDate date = instant.atZone(zoneId).toLocalDate();
+                return date.format(java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日"));
+            } catch (Exception e) {
+                return "未知日期";
+            }
+        }
+        return "未分组";
     }
 
     /**
