@@ -330,13 +330,19 @@ public class MainView {
      * 关闭应用程序并释放资源。
      */
     private void shutdown() {
-        if (fileWatcher != null) {
-            fileWatcher.stop();
-        }
-        imageLoader.shutdown();
-        cacheCoordinator.shutdown();
-        metadataIndex.close();
-        logger.info("Application shutdown complete");
+        new Thread(() -> {
+            try {
+                if (fileWatcher != null) {
+                    fileWatcher.stop();
+                }
+                imageLoader.shutdown();
+                cacheCoordinator.shutdown();
+                metadataIndex.close();
+                logger.info("Application shutdown complete");
+            } catch (Exception e) {
+                logger.error("Error during shutdown", e);
+            }
+        }, "pixelj-shutdown").start();
     }
 
     /**
