@@ -11,7 +11,7 @@
 - **SPI 解码器架构**：通过 ServiceLoader 机制动态加载图像格式解码器
 - **原图查看器**：双击照片打开全尺寸查看，支持缩放和平移
 - **历史记录**：自动保存最近访问的文件夹，方便快速打开
-- **分组浏览**：支持按日期分组显示，EXIF 元数据读取
+- **分组浏览**：支持按日期、按地点分组显示，EXIF 元数据读取
 
 ### 文件处理
 - **NIO.2 目录扫描**：使用 FileVisitor 高效遍历目录树
@@ -58,6 +58,9 @@ src/main/java/com/pixelj/
 │   ├── fs/                        # 文件系统
 │   │   ├── FileScanner.java
 │   │   └── FileWatcher.java
+│   ├── loader/
+│   │   ├── PriorityImageLoader.java  # 优先级图像加载器
+│   │   └── MetadataLoader.java        # EXIF元数据批量加载器
 │   └── db/
 │       └── MetadataIndex.java    # H2 索引
 ├── ui/                           # UI 层
@@ -72,6 +75,7 @@ src/main/java/com/pixelj/
     ├── AppConfig.java
     ├── HistoryManager.java          # 历史记录管理
     ├── GroupManager.java           # 分组管理器
+    ├── GeoCoder.java              # 离线反向地理编码
     ├── MemoryMonitor.java
     └── ScrollPerformanceTracker.java
 ```
