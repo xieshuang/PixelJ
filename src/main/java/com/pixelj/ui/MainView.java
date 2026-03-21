@@ -5,6 +5,7 @@ import com.pixelj.internal.db.MetadataIndex;
 import com.pixelj.internal.fs.FileScanner;
 import com.pixelj.internal.fs.FileWatcher;
 import com.pixelj.internal.loader.PriorityImageLoader;
+import com.pixelj.util.HistoryManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -94,10 +95,14 @@ public class MainView {
      * @return 工具栏
      */
     private ToolBar createToolbar() {
-        Button openFolderBtn = new Button("Open Folder");
+        Button openFolderBtn = new Button("打开文件夹");
         openFolderBtn.setOnAction(e -> openFolder());
 
-        Button refreshBtn = new Button("Refresh");
+        MenuButton historyMenuBtn = new MenuButton("历史记录");
+        historyMenuBtn.setStyle("-fx-background-color: transparent;");
+        updateHistoryMenu(historyMenuBtn);
+
+        Button refreshBtn = new Button("刷新");
         refreshBtn.setOnAction(e -> refreshCurrentFolder());
 
         Separator sep = new Separator();
@@ -111,10 +116,43 @@ public class MainView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        ToolBar toolBar = new ToolBar(openFolderBtn, refreshBtn, sep, titleBox, spacer);
+        ToolBar toolBar = new ToolBar(openFolderBtn, historyMenuBtn, refreshBtn, sep, titleBox, spacer);
         toolBar.setPadding(new Insets(8, 8, 8, 8));
 
         return toolBar;
+    }
+
+    /**
+     * 更新历史记录菜单。
+     *
+     * @param historyMenuBtn 历史菜单按钮
+     */
+    private void updateHistoryMenu(MenuButton historyMenuBtn) {
+        historyMenuBtn.getItems().clear();
+
+        HistoryManager historyManager = HistoryManager.getInstance();
+        List<HistoryManager.HistoryItem> history = historyManager.getHistory();
+
+        if (history.isEmpty()) {
+            MenuItem emptyItem = new MenuItem("暂无历史记录");
+            emptyItem.setDisable(true);
+            historyMenuBtn.getItems().add(emptyItem);
+        } else {
+            for (HistoryManager.HistoryItem item : history) {
+                MenuItem menuItem = new MenuItem(item.getFileName());
+                menuItem.setOnAction(e -> loadDirectory(item.getPath()));
+                historyMenuBtn.getItems().add(menuItem);
+            }
+
+            historyMenuBtn.getItems().add(new SeparatorMenuItem());
+
+            MenuItem clearItem = new MenuItem("清除历史");
+            clearItem.setOnAction(e -> {
+                historyManager.clearHistory();
+                updateHistoryMenu(historyMenuBtn);
+            });
+            historyMenuBtn.getItems().add(clearItem);
+        }
     }
 
     /**
@@ -188,6 +226,8 @@ public class MainView {
     private void loadDirectory(Path directory) {
         currentDirectory = directory;
         stage.setTitle("PixelJ - " + directory.getFileName());
+
+        HistoryManager.getInstance().addHistory(directory);
 
         statusLabel.setText("Scanning...");
         progressBar.setVisible(true);
