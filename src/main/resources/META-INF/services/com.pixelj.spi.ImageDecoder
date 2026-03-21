@@ -1,0 +1,3 @@
+com.pixelj.internal.decoder.JpegImageDecoder
+com.pixelj.internal.decoder.PngImageDecoder
+com.pixelj.internal.decoder.WebPImageDecoder
