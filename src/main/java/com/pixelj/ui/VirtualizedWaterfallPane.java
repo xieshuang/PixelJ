@@ -46,6 +46,7 @@ public class VirtualizedWaterfallPane extends Region {
     private boolean needsUpdate = false;
 
     private Consumer<Path> onItemClicked;
+    private Path selectedPath;
 
     public VirtualizedWaterfallPane(ImageCacheCoordinator cacheCoordinator, PriorityImageLoader imageLoader) {
         this.cacheCoordinator = cacheCoordinator;
@@ -234,6 +235,18 @@ public class VirtualizedWaterfallPane extends Region {
         return visibleCells.computeIfAbsent(path, p -> {
             ImageCell cell = new ImageCell();
             cell.setOnClick(e -> {
+                Path previousSelected = selectedPath;
+                selectedPath = p;
+
+                if (previousSelected != null && !previousSelected.equals(p)) {
+                    ImageCell prevCell = visibleCells.get(previousSelected);
+                    if (prevCell != null) {
+                        prevCell.setSelected(false);
+                    }
+                }
+
+                cell.setSelected(true);
+
                 if (onItemClicked != null) {
                     onItemClicked.accept(p);
                 }

@@ -25,6 +25,7 @@ public class ImageCell extends Region {
     private BufferedImage bufferedImage;
     private String currentPath;
     private boolean isHovered = false;
+    private boolean isSelected = false;
     private javafx.scene.image.Image fxImage;
 
     private EventHandler<MouseEvent> clickHandler;
@@ -111,6 +112,25 @@ public class ImageCell extends Region {
     }
 
     /**
+     * 设置选中状态。
+     *
+     * @param selected 是否选中
+     */
+    public void setSelected(boolean selected) {
+        this.isSelected = selected;
+        redraw();
+    }
+
+    /**
+     * 获取当前选中状态。
+     *
+     * @return 是否选中
+     */
+    public boolean isSelected() {
+        return isSelected;
+    }
+
+    /**
      * 设置点击事件处理器。
      *
      * @param handler 鼠标事件处理器
@@ -164,6 +184,12 @@ public class ImageCell extends Region {
         if (isHovered) {
             ctx.setStroke(Color.rgb(100, 149, 237, 0.8));
             ctx.setLineWidth(2);
+            ctx.strokeRect(1, 1, w - 2, h - 2);
+        }
+
+        if (isSelected) {
+            ctx.setStroke(Color.rgb(255, 215, 0, 0.9));
+            ctx.setLineWidth(3);
             ctx.strokeRect(1, 1, w - 2, h - 2);
         }
     }
