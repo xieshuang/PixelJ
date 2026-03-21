@@ -11,7 +11,7 @@
 - **SPI 解码器架构**：通过 ServiceLoader 机制动态加载图像格式解码器
 - **原图查看器**：双击照片打开全尺寸查看，支持缩放和平移
 - **历史记录**：自动保存最近访问的文件夹，方便快速打开
-- **分组浏览**：支持按日期、按地点分组显示，EXIF 元数据读取
+- **分组浏览**：支持按拍摄日期倒序分组，EXIF 元数据读取，缓存失效机制
 
 ### 文件处理
 - **NIO.2 目录扫描**：使用 FileVisitor 高效遍历目录树
@@ -22,6 +22,7 @@
 - **预取管理器**：滚动时预测性加载即将可见的图像
 - **内存监控**：实时跟踪堆内存使用，阈值触发 GC
 - **滚动性能跟踪**：监控 FPS 和掉帧情况
+- **异步关闭**：关闭操作在后台线程执行，避免 UI 卡顿
 
 ## 技术栈
 
@@ -46,10 +47,6 @@ src/main/java/com/pixelj/
 │   │   ├── L1MemoryCache.java
 │   │   ├── L2DiskCache.java
 │   │   └── ImageCacheCoordinator.java
-│   ├── loader/                   # 图像加载器
-│   │   ├── PriorityImageLoader.java
-│   │   ├── ImageLoadingThreadPool.java
-│   │   └── PrefetchManager.java
 │   ├── decoder/                  # SPI 解码器实现
 │   │   ├── ImageDecoderService.java
 │   │   ├── JpegImageDecoder.java
@@ -58,24 +55,23 @@ src/main/java/com/pixelj/
 │   ├── fs/                        # 文件系统
 │   │   ├── FileScanner.java
 │   │   └── FileWatcher.java
-│   ├── loader/
+│   ├── loader/                    # 图像加载器
 │   │   ├── PriorityImageLoader.java  # 优先级图像加载器
-│   │   └── MetadataLoader.java        # EXIF元数据批量加载器
+│   │   └── MetadataLoader.java       # EXIF 元数据批量加载器
 │   └── db/
-│       └── MetadataIndex.java    # H2 索引
-├── ui/                           # UI 层
+│       └── MetadataIndex.java       # H2 索引
+├── ui/                            # UI 层
 │   ├── MainView.java
 │   ├── VirtualizedWaterfallPane.java
 │   ├── ImageCell.java
 │   ├── ImageViewerDialog.java     # 原图查看器
-│   ├── GroupHeaderCell.java      # 分组标题
-│   ├── DisplayItem.java           # 显示项接口
+│   ├── GroupHeaderCell.java       # 分组标题
+│   ├── DisplayItem.java            # 显示项接口
 │   └── PerformanceMonitor.java
-└── util/                         # 工具类
+└── util/                          # 工具类
     ├── AppConfig.java
-    ├── HistoryManager.java          # 历史记录管理
-    ├── GroupManager.java           # 分组管理器
-    ├── GeoCoder.java              # 离线反向地理编码
+    ├── HistoryManager.java         # 历史记录管理
+    ├── GroupManager.java            # 分组管理器
     ├── MemoryMonitor.java
     └── ScrollPerformanceTracker.java
 ```
