@@ -1,8 +1,8 @@
 package com.pixelj.ui;
 
 import com.pixelj.internal.cache.ImageCacheCoordinator;
-import com.pixelj.internal.db.MetadataIndex;
 import com.pixelj.internal.loader.PriorityImageLoader;
+import com.pixelj.spi.ImageDecoder;
 import com.pixelj.util.GroupManager;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -49,6 +50,7 @@ public class VirtualizedWaterfallPane extends Region {
     private final GroupManager groupManager;
 
     private List<DisplayItem> displayItems;
+    private Map<Path, ImageDecoder.ImageMetadata> metadataMap;
     private int columnCount;
     private double contentHeight;
     private double columnWidth;
@@ -57,14 +59,13 @@ public class VirtualizedWaterfallPane extends Region {
 
     private Consumer<Path> onItemClicked;
     private Path selectedPath;
-    private Map<Path, MetadataIndex.ImageRecord> metadataMap = new HashMap<>();
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy年MM月dd日");
 
     public VirtualizedWaterfallPane(ImageCacheCoordinator cacheCoordinator, PriorityImageLoader imageLoader) {
         this.cacheCoordinator = cacheCoordinator;
         this.imageLoader = imageLoader;
         this.items = new ArrayList<>();
         this.displayItems = new ArrayList<>();
+        this.metadataMap = new HashMap<>();
         this.visibleCells = new ConcurrentHashMap<>();
         this.visibleHeaders = new ConcurrentHashMap<>();
         this.groupManager = new GroupManager();
@@ -144,7 +145,12 @@ public class VirtualizedWaterfallPane extends Region {
                 groups.computeIfAbsent(key, k -> new ArrayList<>()).add(path);
             }
 
-            for (Map.Entry<String, List<Path>> entry : groups.entrySet()) {
+            List<Map.Entry<String, List<Path>>> sortedEntries = new ArrayList<>(groups.entrySet());
+            if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_DATE) {
+                sortedEntries.sort((a, b) -> b.getKey().compareTo(a.getKey()));
+            }
+
+            for (Map.Entry<String, List<Path>> entry : sortedEntries) {
                 displayItems.add(new DisplayItem.HeaderItem(
                         entry.getKey(),
                         entry.getKey(),
@@ -159,50 +165,32 @@ public class VirtualizedWaterfallPane extends Region {
     }
 
     private String getGroupKey(Path path) {
-        MetadataIndex.ImageRecord record = metadataMap.get(path);
-
         if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_DATE) {
-            if (record != null && record.dateTaken() > 0) {
+            ImageDecoder.ImageMetadata meta = metadataMap.get(path);
+            long effectiveDate = 0;
+
+            if (meta != null && meta.dateTaken() > 0) {
+                effectiveDate = meta.dateTaken();
+            }
+
+            if (effectiveDate <= 0) {
                 try {
-                    Instant instant = Instant.ofEpochMilli(record.dateTaken());
-                    ZoneId zoneId = ZoneId.systemDefault();
-                    return instant.atZone(zoneId).toLocalDate().format(DATE_FORMATTER);
+                    effectiveDate = Files.getLastModifiedTime(path).toMillis();
                 } catch (Exception e) {
-                    // fall through to file modification time
+                    // ignore
                 }
             }
-            try {
-                long lastModified = Files.getLastModifiedTime(path).toMillis();
-                Instant instant = Instant.ofEpochMilli(lastModified);
-                ZoneId zoneId = ZoneId.systemDefault();
-                return instant.atZone(zoneId).toLocalDate().format(DATE_FORMATTER);
-            } catch (Exception e) {
+
+            if (effectiveDate <= 0) {
                 return "未知日期";
             }
+
+            LocalDate date = Instant.ofEpochMilli(effectiveDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate();
+            return date.format(DateTimeFormatter.ofPattern("yyyy年MM月dd日"));
         }
-
-        if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_LOCATION) {
-            if (record != null && record.locationName() != null && !record.locationName().isEmpty()) {
-                return record.locationName();
-            }
-            return "未知地点";
-        }
-
-        return null;
-    }
-
-    /**
-     * 设置元数据映射。
-     *
-     * @param metadataMap 元数据映射
-     */
-    public void setMetadataMap(Map<Path, MetadataIndex.ImageRecord> metadataMap) {
-        this.metadataMap = metadataMap != null ? metadataMap : new HashMap<>();
-        buildDisplayItems();
-        clearAllCells();
-        calculateLayout(scrollPane.getViewportBounds().getWidth());
-        repositionCells();
-        updateVisibleCells();
+        return "未分组";
     }
 
     /**
@@ -212,6 +200,20 @@ public class VirtualizedWaterfallPane extends Region {
      */
     public void setGroupMode(GroupManager.GroupMode mode) {
         groupManager.setGroupMode(mode);
+        buildDisplayItems();
+        clearAllCells();
+        calculateLayout(scrollPane.getViewportBounds().getWidth());
+        repositionCells();
+        updateVisibleCells();
+    }
+
+    /**
+     * 设置元数据映射。
+     *
+     * @param metadataMap 路径到元数据的映射
+     */
+    public void setMetadataMap(Map<Path, ImageDecoder.ImageMetadata> metadataMap) {
+        this.metadataMap = metadataMap;
         buildDisplayItems();
         clearAllCells();
         calculateLayout(scrollPane.getViewportBounds().getWidth());

@@ -89,6 +89,13 @@ public class GroupManager {
             result.add(new GroupItem(GroupType.DATE_HEADER, entry.getKey(), null, entry.getValue()));
         }
 
+        result.sort((a, b) -> {
+            if (a.getType() == GroupType.DATE_HEADER && b.getType() == GroupType.DATE_HEADER) {
+                return b.getTitle().compareTo(a.getTitle());
+            }
+            return 0;
+        });
+
         return result;
     }
 
