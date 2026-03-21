@@ -4,6 +4,7 @@ import com.pixelj.internal.cache.ImageCacheCoordinator;
 import com.pixelj.internal.db.MetadataIndex;
 import com.pixelj.internal.fs.FileScanner;
 import com.pixelj.internal.fs.FileWatcher;
+import com.pixelj.internal.loader.MetadataLoader;
 import com.pixelj.internal.loader.PriorityImageLoader;
 import com.pixelj.util.GroupManager;
 import com.pixelj.util.HistoryManager;
@@ -22,6 +23,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
@@ -37,6 +39,7 @@ public class MainView {
     private final ImageCacheCoordinator cacheCoordinator;
     private final PriorityImageLoader imageLoader;
     private final MetadataIndex metadataIndex;
+    private final MetadataLoader metadataLoader;
     private final FileScanner fileScanner;
 
     private VirtualizedWaterfallPane waterfallPane;
@@ -44,6 +47,7 @@ public class MainView {
     private Label imageCountLabel;
     private ProgressBar progressBar;
     private Path currentDirectory;
+    private List<Path> currentImageFiles;
 
     private FileWatcher fileWatcher;
 
@@ -56,6 +60,7 @@ public class MainView {
 
         try {
             this.metadataIndex = new MetadataIndex();
+            this.metadataLoader = new MetadataLoader(metadataIndex);
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize metadata index", e);
         }
@@ -124,7 +129,15 @@ public class MainView {
             }
         });
 
-        HBox viewModeBox = new HBox(10, gridViewBtn, dateGroupBtn);
+        RadioButton locationGroupBtn = new RadioButton("按地点");
+        locationGroupBtn.setToggleGroup(viewToggleGroup);
+        locationGroupBtn.setOnAction(e -> {
+            if (waterfallPane != null) {
+                waterfallPane.setGroupMode(GroupManager.GroupMode.BY_LOCATION);
+            }
+        });
+
+        HBox viewModeBox = new HBox(10, gridViewBtn, dateGroupBtn, locationGroupBtn);
 
         Separator sep = new Separator();
         sep.setPrefWidth(20);
@@ -257,14 +270,22 @@ public class MainView {
         Executors.newSingleThreadExecutor().submit(() -> {
             try {
                 List<Path> imageFiles = fileScanner.scanDirectory(directory);
+                currentImageFiles = imageFiles;
 
                 Platform.runLater(() -> {
                     statusLabel.setText("Loading...");
                     waterfallPane.setItems(imageFiles);
 
                     imageCountLabel.setText(imageFiles.size() + " images");
-                    progressBar.setVisible(false);
-                    statusLabel.setText("Ready");
+                });
+
+                metadataLoader.preloadDirectory(directory, imageFiles, () -> {
+                    Map<Path, MetadataIndex.ImageRecord> metadataMap = metadataLoader.getMetadataMap(directory);
+                    Platform.runLater(() -> {
+                        waterfallPane.setMetadataMap(metadataMap);
+                        progressBar.setVisible(false);
+                        statusLabel.setText("Ready");
+                    });
                 });
 
                 try {
@@ -324,6 +345,7 @@ public class MainView {
             fileWatcher.stop();
         }
         imageLoader.shutdown();
+        metadataLoader.shutdown();
         cacheCoordinator.shutdown();
         metadataIndex.close();
         logger.info("Application shutdown complete");

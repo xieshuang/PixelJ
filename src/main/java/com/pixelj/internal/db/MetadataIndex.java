@@ -5,12 +5,11 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * H2 内存数据库元数据索引。
- * 用于存储和查询图像文件的元数据信息，包括尺寸、拍摄参数等。
+ * 用于存储和查询图像文件的元数据信息，包括尺寸、拍摄参数、GPS等。
  */
 public class MetadataIndex {
 
@@ -26,9 +25,6 @@ public class MetadataIndex {
 
     /**
      * 初始化数据库表结构。
-     * 创建 images 表及必要的索引。
-     *
-     * @throws SQLException 数据库操作异常
      */
     private void initializeSchema() throws SQLException {
         try (Statement stmt = connection.createStatement()) {
@@ -49,23 +45,189 @@ public class MetadataIndex {
                     aperture VARCHAR(64),
                     shutter_speed VARCHAR(64),
                     iso VARCHAR(64),
+                    date_taken BIGINT,
+                    latitude DOUBLE,
+                    longitude DOUBLE,
+                    location_name VARCHAR(128),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """);
 
-            stmt.execute("""
-                CREATE INDEX IF NOT EXISTS idx_path ON images(path)
-            """);
-
-            stmt.execute("""
-                CREATE INDEX IF NOT EXISTS idx_directory ON images(directory)
-            """);
-
-            stmt.execute("""
-                CREATE INDEX IF NOT EXISTS idx_last_modified ON images(last_modified)
-            """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_images_directory ON images(directory)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_images_date_taken ON images(date_taken)");
         }
+    }
+
+    /**
+     * 保存或更新图像记录。
+     */
+    public void saveImageRecord(ImageRecord record) {
+        String sql = """
+            MERGE INTO images (path, filename, directory, extension, file_size, last_modified,
+                              width, height, camera, lens, focal_length, aperture, shutter_speed, iso,
+                              date_taken, latitude, longitude, location_name, updated_at)
+            KEY(path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """;
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, record.path());
+            ps.setString(2, record.filename());
+            ps.setString(3, record.directory());
+            ps.setString(4, record.extension());
+            ps.setLong(5, record.fileSize());
+            ps.setLong(6, record.lastModified());
+            ps.setInt(7, record.width());
+            ps.setInt(8, record.height());
+            ps.setString(9, record.camera());
+            ps.setString(10, record.lens());
+            ps.setString(11, record.focalLength());
+            ps.setString(12, record.aperture());
+            ps.setString(13, record.shutterSpeed());
+            ps.setString(14, record.iso());
+            ps.setLong(15, record.dateTaken());
+            ps.setDouble(16, record.latitude());
+            ps.setDouble(17, record.longitude());
+            ps.setString(18, record.locationName());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to save image record: {}", record.path(), e);
+        }
+    }
+
+    /**
+     * 批量保存图像记录。
+     */
+    public void saveImageRecords(List<ImageRecord> records) {
+        try {
+            connection.setAutoCommit(false);
+        } catch (SQLException e) {
+            logger.error("Failed to set auto-commit false", e);
+            return;
+        }
+        try {
+            for (ImageRecord record : records) {
+                saveImageRecord(record);
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException ex) {
+                logger.error("Failed to rollback", ex);
+            }
+            logger.error("Failed to batch save image records", e);
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException e) {
+                logger.error("Failed to reset auto-commit", e);
+            }
+        }
+    }
+
+    /**
+     * 按路径查询记录。
+     */
+    public Optional<ImageRecord> findByPath(String path) {
+        String sql = "SELECT * FROM images WHERE path = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, path);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapResultSetToRecord(rs));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to find by path: {}", path, e);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 按目录查询所有记录。
+     */
+    public List<ImageRecord> findByDirectory(String directory) {
+        List<ImageRecord> results = new ArrayList<>();
+        String sql = "SELECT * FROM images WHERE directory = ? ORDER BY date_taken DESC, last_modified DESC";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, directory);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(mapResultSetToRecord(rs));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to find by directory: {}", directory, e);
+        }
+        return results;
+    }
+
+    /**
+     * 获取目录下所有图片的元数据映射。
+     */
+    public Map<String, ImageRecord> getMetadataMapByDirectory(String directory) {
+        Map<String, ImageRecord> map = new HashMap<>();
+        for (ImageRecord record : findByDirectory(directory)) {
+            map.put(record.path(), record);
+        }
+        return map;
+    }
+
+    /**
+     * 删除记录。
+     */
+    public void deleteByPath(String path) {
+        String sql = "DELETE FROM images WHERE path = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, path);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to delete by path: {}", path, e);
+        }
+    }
+
+    /**
+     * 检查缓存是否有效（文件修改时间是否一致）。
+     */
+    public boolean isCacheValid(String directory, Map<String, Long> fileLastModifiedMap) {
+        String sql = "SELECT path, last_modified FROM images WHERE directory = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, directory);
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, Long> cached = new HashMap<>();
+                while (rs.next()) {
+                    cached.put(rs.getString("path"), rs.getLong("last_modified"));
+                }
+                return cached.equals(fileLastModifiedMap);
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to check cache validity", e);
+            return false;
+        }
+    }
+
+    private ImageRecord mapResultSetToRecord(ResultSet rs) throws SQLException {
+        return new ImageRecord(
+                rs.getString("path"),
+                rs.getString("filename"),
+                rs.getString("directory"),
+                rs.getString("extension"),
+                rs.getLong("file_size"),
+                rs.getLong("last_modified"),
+                rs.getInt("width"),
+                rs.getInt("height"),
+                rs.getString("camera"),
+                rs.getString("lens"),
+                rs.getString("focal_length"),
+                rs.getString("aperture"),
+                rs.getString("shutter_speed"),
+                rs.getString("iso"),
+                rs.getLong("date_taken"),
+                rs.getDouble("latitude"),
+                rs.getDouble("longitude"),
+                rs.getString("location_name")
+        );
     }
 
     /**
@@ -81,22 +243,6 @@ public class MetadataIndex {
 
     /**
      * 图像记录数据结构。
-     * 包含图像文件的所有元数据信息。
-     *
-     * @param path          完整文件路径
-     * @param filename      文件名
-     * @param directory     所属目录
-     * @param extension     文件扩展名
-     * @param fileSize      文件大小（字节）
-     * @param lastModified 最后修改时间戳
-     * @param width         图像宽度
-     * @param height        图像高度
-     * @param camera        相机型号
-     * @param lens          镜头型号
-     * @param focalLength   焦距
-     * @param aperture      光圈值
-     * @param shutterSpeed  快门速度
-     * @param iso           ISO感光度
      */
     public record ImageRecord(
             String path,
@@ -112,7 +258,11 @@ public class MetadataIndex {
             String focalLength,
             String aperture,
             String shutterSpeed,
-            String iso
+            String iso,
+            long dateTaken,
+            double latitude,
+            double longitude,
+            String locationName
     ) {
     }
 }

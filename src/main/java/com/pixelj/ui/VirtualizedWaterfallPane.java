@@ -1,6 +1,7 @@
 package com.pixelj.ui;
 
 import com.pixelj.internal.cache.ImageCacheCoordinator;
+import com.pixelj.internal.db.MetadataIndex;
 import com.pixelj.internal.loader.PriorityImageLoader;
 import com.pixelj.util.GroupManager;
 import javafx.animation.AnimationTimer;
@@ -14,7 +15,11 @@ import javafx.scene.layout.Region;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -52,6 +57,8 @@ public class VirtualizedWaterfallPane extends Region {
 
     private Consumer<Path> onItemClicked;
     private Path selectedPath;
+    private Map<Path, MetadataIndex.ImageRecord> metadataMap = new HashMap<>();
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy年MM月dd日");
 
     public VirtualizedWaterfallPane(ImageCacheCoordinator cacheCoordinator, PriorityImageLoader imageLoader) {
         this.cacheCoordinator = cacheCoordinator;
@@ -152,19 +159,50 @@ public class VirtualizedWaterfallPane extends Region {
     }
 
     private String getGroupKey(Path path) {
+        MetadataIndex.ImageRecord record = metadataMap.get(path);
+
         if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_DATE) {
+            if (record != null && record.dateTaken() > 0) {
+                try {
+                    Instant instant = Instant.ofEpochMilli(record.dateTaken());
+                    ZoneId zoneId = ZoneId.systemDefault();
+                    return instant.atZone(zoneId).toLocalDate().format(DATE_FORMATTER);
+                } catch (Exception e) {
+                    // fall through to file modification time
+                }
+            }
             try {
-                java.io.File file = path.toFile();
-                long lastModified = file.lastModified();
-                java.time.Instant instant = java.time.Instant.ofEpochMilli(lastModified);
-                java.time.ZoneId zoneId = java.time.ZoneId.systemDefault();
-                java.time.LocalDate date = instant.atZone(zoneId).toLocalDate();
-                return date.format(java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日"));
+                long lastModified = Files.getLastModifiedTime(path).toMillis();
+                Instant instant = Instant.ofEpochMilli(lastModified);
+                ZoneId zoneId = ZoneId.systemDefault();
+                return instant.atZone(zoneId).toLocalDate().format(DATE_FORMATTER);
             } catch (Exception e) {
                 return "未知日期";
             }
         }
-        return "未分组";
+
+        if (groupManager.getGroupMode() == GroupManager.GroupMode.BY_LOCATION) {
+            if (record != null && record.locationName() != null && !record.locationName().isEmpty()) {
+                return record.locationName();
+            }
+            return "未知地点";
+        }
+
+        return null;
+    }
+
+    /**
+     * 设置元数据映射。
+     *
+     * @param metadataMap 元数据映射
+     */
+    public void setMetadataMap(Map<Path, MetadataIndex.ImageRecord> metadataMap) {
+        this.metadataMap = metadataMap != null ? metadataMap : new HashMap<>();
+        buildDisplayItems();
+        clearAllCells();
+        calculateLayout(scrollPane.getViewportBounds().getWidth());
+        repositionCells();
+        updateVisibleCells();
     }
 
     /**
