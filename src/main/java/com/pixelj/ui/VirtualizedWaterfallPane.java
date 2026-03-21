@@ -252,6 +252,12 @@ public class VirtualizedWaterfallPane extends Region {
                 }
             });
 
+            cell.setOnDoubleClick(e -> {
+                logger.debug("Double clicked on: {}", p);
+                ImageViewerDialog viewer = new ImageViewerDialog(p);
+                viewer.show();
+            });
+
             int index = items.indexOf(p);
             int col = index % columnCount;
             int row = index / columnCount;

@@ -69,9 +69,9 @@ public class MainView {
         root.setTop(createToolbar());
         root.setCenter(createContent());
         root.setBottom(createStatusBar());
+        root.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif;");
 
         Scene scene = new Scene(root, 1280, 800);
-        scene.getStylesheets().add(createCSS());
 
         stage.setTitle("PixelJ - Photo Browser");
         stage.setOnCloseRequest(e -> shutdown());
@@ -165,31 +165,6 @@ public class MainView {
         statusBar.setPadding(new Insets(4, 8, 4, 8));
 
         return statusBar;
-    }
-
-    /**
-     * 创建内联 CSS 样式。
-     *
-     * @return CSS 样式字符串
-     */
-    private String createCSS() {
-        return """
-            .root {
-                -fx-font-family: "Segoe UI", Arial, sans-serif;
-            }
-            .button {
-                -fx-cursor: hand;
-            }
-            ScrollPane {
-                -fx-background: #1a1a1a;
-            }
-            .scroll-bar:vertical {
-                -fx-background: #2a2a2a;
-            }
-            .scroll-bar:horizontal {
-                -fx-background: #2a2a2a;
-            }
-            """;
     }
 
     /**

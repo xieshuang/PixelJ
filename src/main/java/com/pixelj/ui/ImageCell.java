@@ -29,6 +29,7 @@ public class ImageCell extends Region {
     private javafx.scene.image.Image fxImage;
 
     private EventHandler<MouseEvent> clickHandler;
+    private EventHandler<MouseEvent> doubleClickHandler;
 
     public ImageCell() {
         this.canvas = new Canvas();
@@ -52,7 +53,9 @@ public class ImageCell extends Region {
         });
 
         setOnMouseClicked(e -> {
-            if (clickHandler != null) {
+            if (e.getClickCount() == 2 && doubleClickHandler != null) {
+                doubleClickHandler.handle(e);
+            } else if (clickHandler != null) {
                 clickHandler.handle(e);
             }
         });
@@ -137,6 +140,15 @@ public class ImageCell extends Region {
      */
     public void setOnClick(EventHandler<MouseEvent> handler) {
         this.clickHandler = handler;
+    }
+
+    /**
+     * 设置双击事件处理器。
+     *
+     * @param handler 双击事件处理器
+     */
+    public void setOnDoubleClick(EventHandler<MouseEvent> handler) {
+        this.doubleClickHandler = handler;
     }
 
     /**

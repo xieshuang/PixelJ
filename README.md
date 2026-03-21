@@ -9,6 +9,7 @@
 - **异步图像加载**：基于 PriorityBlockingQueue 的优先级队列，支持高/中/低三级优先级
 - **虚拟化瀑布流布局**：仅渲染可见区域图像单元格，实现 60fps 流畅滚动
 - **SPI 解码器架构**：通过 ServiceLoader 机制动态加载图像格式解码器
+- **原图查看器**：双击照片打开全尺寸查看，支持缩放和平移
 
 ### 文件处理
 - **NIO.2 目录扫描**：使用 FileVisitor 高效遍历目录树
@@ -61,6 +62,7 @@ src/main/java/com/pixelj/
 │   ├── MainView.java
 │   ├── VirtualizedWaterfallPane.java
 │   ├── ImageCell.java
+│   ├── ImageViewerDialog.java     # 原图查看器
 │   └── PerformanceMonitor.java
 └── util/                         # 工具类
     ├── AppConfig.java
