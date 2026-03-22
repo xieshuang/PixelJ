@@ -22,10 +22,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 原图查看器对话框。
- * 以原始尺寸显示图片，支持缩放和拖动。
+ * 以原始尺寸显示图片，支持缩放、拖动和上一张/下一张切换。
  */
 public class ImageViewerDialog {
 
@@ -35,16 +36,23 @@ public class ImageViewerDialog {
     private final ImageView imageView;
     private final Label pathLabel;
     private final ScrollPane scrollPane;
+    private final List<Path> imagePaths;
+    private int currentIndex;
+    private Button prevBtn;
+    private Button nextBtn;
+    private Label indexLabel;
     private double targetFitWidth = 0;
     private double targetFitHeight = 0;
     private double zoomFactor = 1.0;
     private Path currentImagePath;
 
-    public ImageViewerDialog(Path imagePath) {
-        this.currentImagePath = imagePath;
+    public ImageViewerDialog(List<Path> imagePaths, int initialIndex) {
+        this.imagePaths = imagePaths;
+        this.currentIndex = initialIndex;
+        this.currentImagePath = imagePaths.get(initialIndex);
         this.dialog = new Stage(StageStyle.UTILITY);
         this.dialog.initModality(Modality.APPLICATION_MODAL);
-        this.dialog.setTitle("原图 - " + imagePath.getFileName());
+        this.dialog.setTitle("原图 - " + currentImagePath.getFileName());
         this.dialog.setResizable(true);
 
         dialog.setWidth(800);
@@ -52,7 +60,7 @@ public class ImageViewerDialog {
 
         BorderPane root = new BorderPane();
 
-        pathLabel = new Label(imagePath.toString());
+        pathLabel = new Label(currentImagePath.toString());
         pathLabel.setStyle("-fx-background-color: #2a2a2a; -fx-text-fill: #ccc; -fx-padding: 5;");
         root.setTop(pathLabel);
 
@@ -74,6 +82,17 @@ public class ImageViewerDialog {
         HBox buttonBar = new HBox(10);
         buttonBar.setStyle("-fx-background-color: #2a2a2a; -fx-padding: 10;");
 
+        prevBtn = new Button("◀ 上一张");
+        prevBtn.setOnAction(e -> showPrevious());
+        prevBtn.setDisable(currentIndex <= 0);
+
+        indexLabel = new Label((currentIndex + 1) + " / " + imagePaths.size());
+        indexLabel.setStyle("-fx-text-fill: #ccc;");
+
+        nextBtn = new Button("下一张 ▶");
+        nextBtn.setOnAction(e -> showNext());
+        nextBtn.setDisable(currentIndex >= imagePaths.size() - 1);
+
         Button resetBtn = new Button("重置 (100%)");
         resetBtn.setOnAction(e -> resetZoom());
 
@@ -83,7 +102,7 @@ public class ImageViewerDialog {
         Button closeBtn = new Button("关闭");
         closeBtn.setOnAction(e -> dialog.close());
 
-        buttonBar.getChildren().addAll(resetBtn, fitBtn, closeBtn);
+        buttonBar.getChildren().addAll(prevBtn, indexLabel, nextBtn, resetBtn, fitBtn, closeBtn);
         root.setBottom(buttonBar);
 
         Scene scene = new Scene(root);
@@ -95,10 +114,44 @@ public class ImageViewerDialog {
         dialog.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
                 dialog.close();
+            } else if (e.getCode() == KeyCode.LEFT) {
+                showPrevious();
+            } else if (e.getCode() == KeyCode.RIGHT) {
+                showNext();
             }
         });
 
         setupEventHandlers();
+    }
+
+    private void showPrevious() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateImage();
+            updateNavigationButtons();
+        }
+    }
+
+    private void showNext() {
+        if (currentIndex < imagePaths.size() - 1) {
+            currentIndex++;
+            updateImage();
+            updateNavigationButtons();
+        }
+    }
+
+    private void updateImage() {
+        currentImagePath = imagePaths.get(currentIndex);
+        dialog.setTitle("原图 - " + currentImagePath.getFileName());
+        pathLabel.setText(currentImagePath.toString());
+        resetZoom();
+        loadImage();
+    }
+
+    private void updateNavigationButtons() {
+        prevBtn.setDisable(currentIndex <= 0);
+        nextBtn.setDisable(currentIndex >= imagePaths.size() - 1);
+        indexLabel.setText((currentIndex + 1) + " / " + imagePaths.size());
     }
 
     private void loadImage() {

@@ -476,8 +476,11 @@ public class VirtualizedWaterfallPane extends Region {
 
             cell.setOnDoubleClick(e -> {
                 logger.debug("Double clicked on: {}", p);
-                ImageViewerDialog viewer = new ImageViewerDialog(p);
-                viewer.show();
+                int index = items.indexOf(p);
+                if (index >= 0) {
+                    ImageViewerDialog viewer = new ImageViewerDialog(items, index);
+                    viewer.show();
+                }
             });
 
             int index = getDisplayIndexForPath(p);
