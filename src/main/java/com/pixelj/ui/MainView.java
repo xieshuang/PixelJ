@@ -92,6 +92,37 @@ public class MainView {
         Scene scene = new Scene(root, 1280, 800);
         scene.setFill(null);
 
+        String menuCss = 
+            ".context-menu {" +
+            "    -fx-background-color: #2d2d2d;" +
+            "    -fx-border-color: #3c3c3c;" +
+            "    -fx-border-width: 1px;" +
+            "    -fx-padding: 4px;" +
+            "}" +
+            ".menu-item {" +
+            "    -fx-background-color: transparent;" +
+            "    -fx-padding: 6px 30px 6px 12px;" +
+            "}" +
+            ".menu-item:hover {" +
+            "    -fx-background-color: #3a3a3a;" +
+            "}" +
+            ".menu-item:focused {" +
+            "    -fx-background-color: #3a3a3a;" +
+            "}" +
+            ".menu-item .label {" +
+            "    -fx-text-fill: #cccccc;" +
+            "}" +
+            ".menu-item:hover .label {" +
+            "    -fx-text-fill: #ffffff;" +
+            "}" +
+            ".menu-item:disabled .label {" +
+            "    -fx-text-fill: #808080;" +
+            "}" +
+            ".separator-menu-item .line {" +
+            "    -fx-background-color: #3c3c3c;" +
+            "}";
+        scene.getStylesheets().add("data:text/css," + menuCss.replaceAll("\\s+", " "));
+
         stage.setTitle("PixelJ");
         stage.setOnCloseRequest(e -> shutdown());
 
@@ -300,42 +331,30 @@ public class MainView {
     private void updateHistoryMenu(MenuButton historyMenuBtn) {
         historyMenuBtn.getItems().clear();
 
-        ContextMenu contextMenu = new ContextMenu();
-        contextMenu.setStyle(
-            "-fx-background-color: #2d2d2d;" +
-            "-fx-border-color: #3c3c3c;" +
-            "-fx-border-width: 1px;" +
-            "-fx-padding: 4px;"
-        );
-
         HistoryManager historyManager = HistoryManager.getInstance();
         List<HistoryManager.HistoryItem> history = historyManager.getHistory();
 
         if (history.isEmpty()) {
             MenuItem emptyItem = new MenuItem("暂无历史记录");
-            emptyItem.setStyle("-fx-text-fill: #808080; -fx-padding: 6 30 6 12;");
             emptyItem.setDisable(true);
-            contextMenu.getItems().add(emptyItem);
+            historyMenuBtn.getItems().add(emptyItem);
         } else {
             for (HistoryManager.HistoryItem item : history) {
                 MenuItem menuItem = new MenuItem(item.getFileName());
-                menuItem.setStyle("-fx-text-fill: #cccccc; -fx-background-color: transparent; -fx-padding: 6 30 6 12;");
                 menuItem.setOnAction(e -> loadDirectory(item.getPath()));
-                contextMenu.getItems().add(menuItem);
+                historyMenuBtn.getItems().add(menuItem);
             }
 
-            contextMenu.getItems().add(new SeparatorMenuItem());
+            historyMenuBtn.getItems().add(new SeparatorMenuItem());
 
             MenuItem clearItem = new MenuItem("清除历史");
-            clearItem.setStyle("-fx-text-fill: #cccccc; -fx-background-color: transparent; -fx-padding: 6 30 6 12;");
             clearItem.setOnAction(e -> {
                 historyManager.clearHistory();
                 updateHistoryMenu(historyMenuBtn);
             });
-            contextMenu.getItems().add(clearItem);
+            historyMenuBtn.getItems().add(clearItem);
         }
 
-        historyMenuBtn.setContextMenu(contextMenu);
         historyMenuBtn.setOnMouseEntered(e -> historyMenuBtn.setStyle(
             "-fx-background-color: " + COLOR_BUTTON_HOVER + ";" +
             "-fx-text-fill: #ffffff;" +
