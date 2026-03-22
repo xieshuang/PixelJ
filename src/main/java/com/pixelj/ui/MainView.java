@@ -300,33 +300,42 @@ public class MainView {
     private void updateHistoryMenu(MenuButton historyMenuBtn) {
         historyMenuBtn.getItems().clear();
 
+        ContextMenu contextMenu = new ContextMenu();
+        contextMenu.setStyle(
+            "-fx-background-color: #2d2d2d;" +
+            "-fx-border-color: #3c3c3c;" +
+            "-fx-border-width: 1px;" +
+            "-fx-padding: 4px;"
+        );
+
         HistoryManager historyManager = HistoryManager.getInstance();
         List<HistoryManager.HistoryItem> history = historyManager.getHistory();
 
         if (history.isEmpty()) {
             MenuItem emptyItem = new MenuItem("暂无历史记录");
+            emptyItem.setStyle("-fx-text-fill: #808080; -fx-padding: 6 30 6 12;");
             emptyItem.setDisable(true);
-            emptyItem.setStyle("-fx-text-fill: " + COLOR_TEXT_DIM + ";");
-            historyMenuBtn.getItems().add(emptyItem);
+            contextMenu.getItems().add(emptyItem);
         } else {
             for (HistoryManager.HistoryItem item : history) {
                 MenuItem menuItem = new MenuItem(item.getFileName());
-                menuItem.setStyle("-fx-text-fill: " + COLOR_TEXT + ";");
+                menuItem.setStyle("-fx-text-fill: #cccccc; -fx-background-color: transparent; -fx-padding: 6 30 6 12;");
                 menuItem.setOnAction(e -> loadDirectory(item.getPath()));
-                historyMenuBtn.getItems().add(menuItem);
+                contextMenu.getItems().add(menuItem);
             }
 
-            historyMenuBtn.getItems().add(new SeparatorMenuItem());
+            contextMenu.getItems().add(new SeparatorMenuItem());
 
             MenuItem clearItem = new MenuItem("清除历史");
-            clearItem.setStyle("-fx-text-fill: " + COLOR_TEXT + ";");
+            clearItem.setStyle("-fx-text-fill: #cccccc; -fx-background-color: transparent; -fx-padding: 6 30 6 12;");
             clearItem.setOnAction(e -> {
                 historyManager.clearHistory();
                 updateHistoryMenu(historyMenuBtn);
             });
-            historyMenuBtn.getItems().add(clearItem);
+            contextMenu.getItems().add(clearItem);
         }
 
+        historyMenuBtn.setContextMenu(contextMenu);
         historyMenuBtn.setOnMouseEntered(e -> historyMenuBtn.setStyle(
             "-fx-background-color: " + COLOR_BUTTON_HOVER + ";" +
             "-fx-text-fill: #ffffff;" +
