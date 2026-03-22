@@ -53,7 +53,7 @@ public class ImageViewerDialog {
     private Label imageInfoLabel;
     private Button prevBtn;
     private Button nextBtn;
-    private Label pathLabel;
+    private Label pathLabel = new Label("");
     
     private int currentIndex;
     private double targetFitWidth = 0;
@@ -105,6 +105,8 @@ public class ImageViewerDialog {
                 showNext();
             }
         });
+
+        setupEventHandlers();
     }
 
     private HBox createTitleBar() {
@@ -322,6 +324,7 @@ public class ImageViewerDialog {
     private void onTitleBarMouseDragged(MouseEvent e) {
         dialog.setX(e.getScreenX() - dragX);
         dialog.setY(e.getScreenY() - dragY);
+        e.consume();
     }
 
     private void showPrevious() {
